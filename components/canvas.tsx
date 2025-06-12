@@ -1,8 +1,21 @@
 "use client";
 
-import { useCanvasStore } from "@/context/useCanvas";
+import { ToolName, useCanvasStore } from "@/context/useCanvas";
+import { duplicateSelectedElement } from "@/functionality/utils/utils";
 import { useRef, useEffect } from "react";
 
+const getCursor = (tool: ToolName) => {
+  switch (tool) {
+    case "move":
+      return "move";
+    case "rectangle":
+      return "crosshair";
+    case "scale":
+      return "nwse-resize";
+    default:
+      return "default";
+  }
+};
 export default function CanvasComponent() {
   const {
     setCanvasRef,
@@ -27,6 +40,13 @@ export default function CanvasComponent() {
     selectedTextIndex,
     texts,
     setSelectedTextIndex,
+    undo,
+    redo,
+    saveToHistory,
+    setScaling,
+    setScaleStartPos,
+    isScaling,
+    scaleStartPos,
   } = useCanvasStore();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -34,6 +54,76 @@ export default function CanvasComponent() {
   useEffect(() => {
     setCanvasRef(canvasRef);
   }, [setCanvasRef]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+
+      if (e.ctrlKey) {
+        e.preventDefault(); // Prevent default behavior for shortcuts like Ctrl+D
+
+        switch (key) {
+          case "d": {
+            duplicateSelectedElement();
+            break;
+          }
+
+          case "z": {
+            undo();
+            break;
+          }
+
+          case "y": {
+            redo();
+            break;
+          }
+
+          // Add more keybindings here...
+
+          default:
+            break;
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedRectIndex, rects, selectedTextIndex, texts, undo, redo]);
+
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      const zoomStep = 0.05;
+      const minZoom = 0.3;
+      const maxZoom = 0.6;
+
+      if (e.deltaY < 0) {
+        // Zoom in
+        useCanvasStore.setState((state) => ({
+          zoom: Math.min(state.zoom + zoomStep, maxZoom),
+        }));
+      } else {
+        // Zoom out
+        useCanvasStore.setState((state) => ({
+          zoom: Math.max(state.zoom - zoomStep, minZoom),
+        }));
+      }
+    };
+
+    const canvasElem = canvasRef.current;
+    if (canvasElem) {
+      canvasElem.addEventListener("wheel", handleWheel, { passive: false });
+    }
+
+    return () => {
+      if (canvasElem) {
+        canvasElem.removeEventListener("wheel", handleWheel);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -61,7 +151,7 @@ export default function CanvasComponent() {
     });
     texts.forEach((t, index) => {
       ctx.fillStyle = t.color;
-      ctx.font = "bold 32px sans-serif";
+      ctx.font = "bold 48px sans-serif";
       ctx.fillText(t.text, t.x, t.y);
 
       if (index === selectedTextIndex) {
@@ -80,7 +170,7 @@ export default function CanvasComponent() {
       const previewWidth = mouseX - startPos.x;
       const previewHeight = mouseY - startPos.y;
       ctx.setLineDash([6]);
-      ctx.strokeStyle = "gray";
+      ctx.strokeStyle = "black";
       ctx.lineWidth = 1;
       ctx.strokeRect(startPos.x, startPos.y, previewWidth, previewHeight);
       ctx.setLineDash([]);
@@ -110,7 +200,7 @@ export default function CanvasComponent() {
     if (selectedTool === "rectangle") {
       setStartPos({ x, y });
       setDrawing(true);
-    } else if (selectedTool === "none") {
+    } else if (selectedTool === "move") {
       const ctx = canvasRef.current?.getContext("2d");
       if (!ctx) return;
 
@@ -137,6 +227,7 @@ export default function CanvasComponent() {
         setSelectedRectIndex(null);
         setDragging(true);
         setStartPos({ x, y });
+        saveToHistory();
         return;
       }
 
@@ -164,6 +255,26 @@ export default function CanvasComponent() {
         setSelectedRectIndex(null);
         setSelectedTextIndex(null);
       }
+      saveToHistory();
+    } else if (selectedTool === "scale") {
+      const rectIndex = rects
+        .slice()
+        .reverse()
+        .findIndex(
+          (r) =>
+            x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height,
+        );
+      console.log("scale selected");
+      console.log(rectIndex);
+      if (rectIndex !== -1) {
+        const actualIndex = rects.length - 1 - rectIndex;
+        setSelectedRectIndex(actualIndex);
+        setScaling(true);
+        setScaleStartPos({ x, y });
+        saveToHistory();
+      } else {
+        setSelectedRectIndex(null);
+      }
     }
   };
 
@@ -175,7 +286,7 @@ export default function CanvasComponent() {
     const y = (e.clientY - rect.top) / zoom;
     setMouse(x, y);
 
-    if (isDragging && selectedTool === "none" && startPos) {
+    if (isDragging && selectedTool === "move" && startPos) {
       const dx = x - startPos.x;
       const dy = y - startPos.y;
 
@@ -198,8 +309,33 @@ export default function CanvasComponent() {
         };
         useCanvasStore.setState({ texts: updatedTexts });
       }
-
       setStartPos({ x, y });
+    }
+
+    if (
+      isScaling &&
+      selectedTool === "scale" &&
+      scaleStartPos &&
+      selectedRectIndex !== null
+    ) {
+      console.log("scaling logic triggered");
+      const dx = x - scaleStartPos.x;
+      const dy = y - scaleStartPos.y;
+
+      const updatedRects = [...rects];
+      const rect = updatedRects[selectedRectIndex];
+
+      const newWidth = Math.max(10, rect.width + dx); // Set minimum width
+      const newHeight = Math.max(10, rect.height + dy); // Set minimum height
+
+      updatedRects[selectedRectIndex] = {
+        ...rect,
+        width: newWidth,
+        height: newHeight,
+      };
+
+      useCanvasStore.setState({ rects: updatedRects });
+      setScaleStartPos({ x, y }); // Update start for next move
     }
   };
 
@@ -213,9 +349,15 @@ export default function CanvasComponent() {
     if (isDrawing && selectedTool === "rectangle" && startPos) {
       const w = mouseX - startPos.x;
       const h = mouseY - startPos.y;
+      saveToHistory();
       addRect(startPos.x, startPos.y, w, h, activeColor);
       setDrawing(false);
       setStartPos(null);
+    }
+
+    if (isScaling) {
+      setScaling(false);
+      setScaleStartPos(null);
     }
   };
 
@@ -237,7 +379,7 @@ export default function CanvasComponent() {
             width: `${width}px`,
             height: `${height}px`,
             border: "1px solid black",
-            cursor: selectedTool === "rectangle" ? "crosshair" : "move",
+            cursor: getCursor(selectedTool),
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}

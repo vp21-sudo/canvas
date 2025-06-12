@@ -18,15 +18,15 @@ const AddTextToCanvas = () => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
 
-  const { addText, width, height, setTool, activeColor } = useCanvasStore();
+  const { addText, width, height, setTool, activeColor, saveToHistory } =
+    useCanvasStore();
 
   const handleAdd = () => {
     if (text.trim() === "") return;
 
-    // ✨ Place at center of canvas
     const centerX = width / 2;
     const centerY = height / 2;
-
+    saveToHistory();
     addText(centerX, centerY, text, activeColor);
 
     setText("");

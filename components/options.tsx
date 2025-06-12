@@ -1,19 +1,26 @@
-import { useCanvasStore } from "@/context/useCanvas";
+import { ToolName, useCanvasStore } from "@/context/useCanvas";
 import CanvasSizeDialog from "./custom/dialogs/canvas-size";
 import { Button } from "./ui/button";
-import { Download, Minus, Plus, RotateCcw, Square } from "lucide-react";
+import {
+  Download,
+  Minus,
+  MousePointer,
+  Move,
+  Plus,
+  Scaling,
+  Square,
+} from "lucide-react";
 import { Input } from "./ui/input";
 import { CodeExport } from "./custom/drawer/code-export";
 import AddTextToCanvas from "./custom/dialogs/add-text";
 
 const Options = () => {
-  const { setTool, selectedTool, clearRects, setActiveColor, canvasRef } =
-    useCanvasStore();
-  const handleToolClick = (tool: string) => {
+  const { setTool, selectedTool, setActiveColor, canvasRef } = useCanvasStore();
+  const handleToolClick = (tool: ToolName) => {
     if (selectedTool === tool) {
       return setTool("none");
     }
-    setTool("rectangle");
+    setTool(tool);
   };
 
   const handleExport = () => {
@@ -42,16 +49,43 @@ const Options = () => {
         variant={"secondary"}
         className={
           " hover:bg-none " +
+          (selectedTool === "none" ? "bg-blue-100 hover:bg-blue-200 " : "")
+        }
+        onClick={() => handleToolClick("none")}
+      >
+        <MousePointer />
+      </Button>
+      <Button
+        variant={"secondary"}
+        className={
+          " hover:bg-none " +
           (selectedTool === "rectangle" ? "bg-blue-100 hover:bg-blue-200 " : "")
         }
         onClick={() => handleToolClick("rectangle")}
       >
         <Square />
       </Button>
-      <AddTextToCanvas />
-      <Button variant={"secondary"} onClick={clearRects}>
-        <RotateCcw />
+      <Button
+        variant={"secondary"}
+        className={
+          " hover:bg-none " +
+          (selectedTool === "move" ? "bg-blue-100 hover:bg-blue-200 " : "")
+        }
+        onClick={() => handleToolClick("move")}
+      >
+        <Move />
       </Button>
+      <Button
+        variant={"secondary"}
+        className={
+          " hover:bg-none " +
+          (selectedTool === "scale" ? "bg-blue-100 hover:bg-blue-200 " : "")
+        }
+        onClick={() => handleToolClick("scale")}
+      >
+        <Scaling />
+      </Button>
+      <AddTextToCanvas />
       <CodeExport />
       <Button variant={"secondary"} onClick={handleExport}>
         <Download />

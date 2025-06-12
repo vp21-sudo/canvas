@@ -1,7 +1,7 @@
 import { RefObject } from "react";
 import { create } from "zustand";
 
-type ToolName = "rectangle" | "text" | "none"; // extend with more tools as needed
+export type ToolName = "rectangle" | "move" | "scale" | "text" | "none"; // extend with more tools as needed
 
 type Rectangle = {
   x: number;
@@ -62,6 +62,17 @@ interface CanvasState {
   addText: (x: number, y: number, text: string, color: string) => void;
   selectedTextIndex: number | null;
   setSelectedTextIndex: (index: number | null) => void;
+
+  history: { rects: Rectangle[]; texts: CanvasText[] }[];
+  future: { rects: Rectangle[]; texts: CanvasText[] }[];
+  saveToHistory: () => void;
+  undo: () => void;
+  redo: () => void;
+
+  isScaling: boolean;
+  setScaling: (value: boolean) => void;
+  scaleStartPos: { x: number; y: number } | null;
+  setScaleStartPos: (pos: { x: number; y: number } | null) => void;
 }
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
@@ -74,8 +85,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setSize: (width, height) => set({ width, height }),
   zoom: 0.5,
   setZoom: (zoom) => set({ zoom }),
-  zoomIn: () => set({ zoom: Math.min(get().zoom + 0.1, 0.7) }),
-  zoomOut: () => set({ zoom: Math.max(get().zoom - 0.1, 0.3) }),
+  zoomIn: () => set({ zoom: Math.min(get().zoom + 0.05, 0.6) }),
+  zoomOut: () => set({ zoom: Math.max(get().zoom - 0.05, 0.3) }),
 
   rects: [],
   addRect: (x, y, width, height, color) =>
@@ -93,7 +104,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setDrawing: (drawing) => set({ isDrawing: drawing }),
   startPos: null,
   setStartPos: (pos) => set({ startPos: pos }),
-  clearRects: () => set({ rects: [] }),
+  clearRects: () => set({ rects: [], texts: [] }),
   activeColor: "#000000",
   setActiveColor: (color) => set({ activeColor: color }),
 
@@ -110,4 +121,47 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   selectedTextIndex: null,
   setSelectedTextIndex: (index) => set({ selectedTextIndex: index }),
+
+  history: [],
+  future: [],
+  saveToHistory: () => {
+    const { rects, texts, history } = get();
+    set({
+      history: [...history, { rects: [...rects], texts: [...texts] }],
+      future: [],
+    });
+  },
+  undo: () => {
+    const { history, rects, texts, future } = get();
+    if (history.length === 0) return;
+
+    const previous = history[history.length - 1];
+    const newHistory = history.slice(0, -1);
+
+    set({
+      rects: previous.rects,
+      texts: previous.texts,
+      history: newHistory,
+      future: [{ rects: [...rects], texts: [...texts] }, ...future],
+    });
+  },
+  redo: () => {
+    const { history, rects, texts, future } = get();
+    if (future.length === 0) return;
+
+    const next = future[0];
+    const newFuture = future.slice(1);
+
+    set({
+      rects: next.rects,
+      texts: next.texts,
+      history: [...history, { rects: [...rects], texts: [...texts] }],
+      future: newFuture,
+    });
+  },
+
+  isScaling: false,
+  setScaling: (value: boolean) => set({ isScaling: value }),
+  scaleStartPos: null,
+  setScaleStartPos: (pos) => set({ scaleStartPos: pos }),
 }));
